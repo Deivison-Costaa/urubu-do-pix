@@ -2,7 +2,7 @@
 
 **Proposta de tema · Projeto 01 · Engenharia de Sistemas Distribuídos 2026.2**
 
-**Equipe:** Deivison Costa (@Deivison-Costaa) · Giancarlo Silveira Cavalcante (@GianBala) · Herlan Alef de Lima Nascimento (@HerlanLima) · *Integrante 4* · *Integrante 5*
+**Equipe:** Deivison Costa (@Deivison-Costaa) · Giancarlo Silveira Cavalcante (@GianBala) · Herlan Alef de Lima Nascimento (@HerlanLima) · Flavio Mesquita Marinho Filho (@flaviofilho001) · John Victor de Oliveira Atanazio (@johnvictor01)
 **Repositório:** github.com/Deivison-Costaa/urubu-do-pix
 
 ## 1. Problema

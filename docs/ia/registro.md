@@ -20,7 +20,7 @@ Uma entrada por tarefa, da mais recente para a mais antiga:
 ### 2026-10-08: escolha do tema e documentação do Projeto 01
 - **Integrante:** Deivison Costa
 - **Ferramenta e modelo:** Claude Code, modelo Claude Opus 5.5
-- **Parte do trabalho:** análise do enunciado, sugestão de temas, redação da proposta e do README inicial, criação do repositório
+- **Parte do trabalho:** análise do enunciado, sugestão de temas, redação da proposta e do README inicial, criação do repositório e identificação dos usuários do GitHub dos integrantes a partir de repositórios em comum
 - **Contexto fornecido:** PDF do enunciado e o pedido de ideias mais complexas que as sugestões do professor, seguindo os critérios de avaliação
 - **Resultado:**
   - Aceito: o tema de pagamentos instantâneos inspirado no Pix, escolhido entre cinco sugestões. As outras quatro (bolsa de valores com motor de casamento determinístico, central de transplantes, CI/CD com cadeia de suprimentos verificável e rede de recarga de veículos elétricos) foram descartadas.

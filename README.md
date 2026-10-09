@@ -43,8 +43,8 @@ Padrões arquiteturais, tecnologias e critérios de sucesso estão na [proposta 
 | Deivison Costa | [@Deivison-Costaa](https://github.com/Deivison-Costaa) | *a preencher* |
 | Giancarlo Silveira Cavalcante | [@GianBala](https://github.com/GianBala) | *a preencher* |
 | Herlan Alef de Lima Nascimento | [@HerlanLima](https://github.com/HerlanLima) | *a preencher* |
-| *Integrante 4* | | |
-| *Integrante 5* | | |
+| Flavio Mesquita Marinho Filho | [@flaviofilho001](https://github.com/flaviofilho001) | *a preencher* |
+| John Victor de Oliveira Atanazio | [@johnvictor01](https://github.com/johnvictor01) | *a preencher* |
 
 ### Frentes de trabalho
 
