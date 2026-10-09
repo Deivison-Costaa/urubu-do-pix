@@ -1,0 +1,25 @@
+# Binários e build
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# Dependências
+/vendor/
+node_modules/
+
+# Segredos e credenciais (nunca versionar)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+
+# IDE e sistema
+.idea/
+.vscode/
+*.swp
+.DS_Store
