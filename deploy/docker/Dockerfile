@@ -2,7 +2,7 @@
 # Imagem única para todos os serviços: SERVICO escolhe qual binário compilar.
 # docker build -f deploy/docker/Dockerfile --build-arg SERVICO=spi .
 
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
