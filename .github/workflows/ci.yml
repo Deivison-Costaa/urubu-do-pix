@@ -1,0 +1,208 @@
+# Pipeline de integração contínua (ADR-0004).
+# Todo push e PR na main: testes, lint, análise de segurança, build e scan
+# das imagens, SBOM e teste de fumaça com o ambiente completo.
+# Push na main do repositório oficial: publica as imagens no GHCR e as
+# assina com Cosign (keyless, via OIDC do GitHub).
+# As actions são fixadas por SHA de commit, não por tag (supply chain).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Em PRs, um push novo cancela a execução anterior. Na main não: cancelar no
+# meio da publicação deixaria uma imagem publicada sem assinatura.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Sempre o patch mais recente da 1.26: o "go 1.26" do go.mod faria o
+  # setup-go instalar a 1.26.0, com vulnerabilidades já corrigidas na stdlib.
+  GO_VERSAO: "1.26.x"
+  GOLANGCI_LINT_VERSAO: v2.15.0
+  GOVULNCHECK_VERSAO: v1.9.0
+
+jobs:
+  descobrir:
+    name: Descobrir serviços
+    runs-on: ubuntu-latest
+    outputs:
+      servicos: ${{ steps.lista.outputs.servicos }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: lista
+        # Cada pasta em cmd/ é um serviço com imagem própria.
+        run: echo "servicos=$(ls cmd | jq -R . | jq -cs .)" >> "$GITHUB_OUTPUT"
+
+  go:
+    name: Testes Go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSAO }}
+          check-latest: true
+      - name: Formatação
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: go.mod em ordem
+        run: go mod tidy -diff
+      - name: go vet
+        run: go vet ./...
+      - name: Testes com detector de corrida
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+      - name: Cobertura
+        run: go tool cover -func=coverage.out | tail -1 | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: cobertura
+          path: coverage.out
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSAO }}
+          check-latest: true
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSAO }}
+
+  seguranca:
+    name: Segurança (SCA, segredos, configuração)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSAO }}
+          check-latest: true
+      - name: govulncheck (vulnerabilidades alcançáveis no código)
+        run: go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSAO} ./...
+      - name: Trivy no repositório (dependências, segredos e Dockerfile)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  imagens:
+    name: Imagem ${{ matrix.servico }}
+    needs: [descobrir, go]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        servico: ${{ fromJSON(needs.descobrir.outputs.servicos) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          build-args: |
+            SERVICO=${{ matrix.servico }}
+            VERSAO=${{ github.sha }}
+          tags: urubu-do-pix/${{ matrix.servico }}:ci
+          load: true
+          cache-from: type=gha,scope=${{ matrix.servico }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.servico }}
+      - name: Trivy na imagem
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: urubu-do-pix/${{ matrix.servico }}:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: urubu-do-pix/${{ matrix.servico }}:ci
+          format: spdx-json
+          artifact-name: sbom-${{ matrix.servico }}.spdx.json
+
+  fumaca:
+    name: Teste de fumaça (Docker Compose)
+    needs: [go]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: tem
+        run: |
+          if [[ -f compose.yaml ]]; then echo "compose=true" >> "$GITHUB_OUTPUT"; else echo "compose=false" >> "$GITHUB_OUTPUT"; fi
+      - name: Subir o ambiente
+        if: steps.tem.outputs.compose == 'true'
+        run: |
+          cp .env.example .env
+          docker compose up -d --build --wait --wait-timeout 300
+      - name: Verificações
+        if: steps.tem.outputs.compose == 'true'
+        run: ./scripts/fumaca.sh
+      - name: Logs em caso de falha
+        if: failure() && steps.tem.outputs.compose == 'true'
+        run: docker compose logs --no-color --tail 200
+      - name: Derrubar o ambiente
+        if: always() && steps.tem.outputs.compose == 'true'
+        run: docker compose down -v
+
+  publicar:
+    name: Publicar e assinar ${{ matrix.servico }}
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'Deivison-Costaa/urubu-do-pix'
+    needs: [descobrir, imagens, lint, seguranca, fumaca]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # assinatura keyless do Cosign
+    strategy:
+      matrix:
+        servico: ${{ fromJSON(needs.descobrir.outputs.servicos) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository }}/${{ matrix.servico }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest
+      - id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          build-args: |
+            SERVICO=${{ matrix.servico }}
+            VERSAO=${{ github.sha }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          sbom: true
+          provenance: mode=max
+          cache-from: type=gha,scope=${{ matrix.servico }}
+      - name: Assinar a imagem pelo digest
+        env:
+          IMAGEM: ghcr.io/${{ github.repository }}/${{ matrix.servico }}@${{ steps.push.outputs.digest }}
+        run: cosign sign --yes "${IMAGEM,,}"
