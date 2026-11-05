@@ -1,0 +1,254 @@
+# Ambiente local do Urubu do Pix.
+#   cp .env.example .env
+#   docker compose up -d --build --wait
+#   docker compose --profile observabilidade up -d   # Prometheus e Grafana
+#
+# Redes: cada serviço só alcança o próprio banco (database-per-service
+# também na rede) e só o gateway e os PSPs ficam na rede de borda.
+
+name: urubu-do-pix
+
+x-servico: &servico
+  build: &build
+    context: .
+    dockerfile: deploy/docker/Dockerfile
+    args:
+      VERSAO: ${VERSAO:-dev}
+  restart: unless-stopped
+  read_only: true
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  environment: &ambiente
+    LOG_LEVEL: info
+    HTTP_ADDR: ":8080"
+
+x-postgres: &postgres
+  image: postgres:18.6-alpine
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+    interval: 3s
+    timeout: 3s
+    retries: 20
+
+services:
+  # ---------- Borda ----------
+  gateway:
+    image: envoyproxy/envoy:v1.39.6
+    restart: unless-stopped
+    command: ["envoy", "-c", "/etc/envoy/envoy.yaml", "--log-level", "warn"]
+    volumes:
+      - ./deploy/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    ports:
+      - "${GATEWAY_PORTA:-8080}:8080"
+    # /ready do admin responde LIVE quando os listeners estão abertos.
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9901 && printf 'GET /ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q LIVE <&3"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [borda, observabilidade]
+    depends_on:
+      psp-alfa: { condition: service_healthy }
+      psp-beta: { condition: service_healthy }
+
+  # ---------- Bancos simulados (mesmo código, uma instância por banco) ----------
+  psp-alfa:
+    <<: *servico
+    build: { <<: *build, args: { SERVICO: psp, VERSAO: "${VERSAO:-dev}" } }
+    environment:
+      <<: *ambiente
+      PSP_ISPB: "10000001"
+      PSP_NOME: Banco Alfa
+      DATABASE_URL: postgres://psp:${PG_PASSWORD:?defina PG_PASSWORD no .env}@pg-psp-alfa:5432/psp?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+    networks: [borda, nucleo, db-psp-alfa, observabilidade]
+    depends_on:
+      pg-psp-alfa: { condition: service_healthy }
+      redpanda-init: { condition: service_completed_successfully }
+
+  psp-beta:
+    <<: *servico
+    build: { <<: *build, args: { SERVICO: psp, VERSAO: "${VERSAO:-dev}" } }
+    environment:
+      <<: *ambiente
+      PSP_ISPB: "20000002"
+      PSP_NOME: Banco Beta
+      DATABASE_URL: postgres://psp:${PG_PASSWORD:?defina PG_PASSWORD no .env}@pg-psp-beta:5432/psp?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+    networks: [borda, nucleo, db-psp-beta, observabilidade]
+    depends_on:
+      pg-psp-beta: { condition: service_healthy }
+      redpanda-init: { condition: service_completed_successfully }
+
+  # ---------- Núcleo ----------
+  spi:
+    <<: *servico
+    build: { <<: *build, args: { SERVICO: spi, VERSAO: "${VERSAO:-dev}" } }
+    environment:
+      <<: *ambiente
+      DATABASE_URL: postgres://spi:${PG_PASSWORD:?defina PG_PASSWORD no .env}@pg-spi:5432/spi?sslmode=disable
+      KAFKA_BROKERS: redpanda:9092
+    networks: [nucleo, db-spi, observabilidade]
+    depends_on:
+      pg-spi: { condition: service_healthy }
+      redpanda-init: { condition: service_completed_successfully }
+
+  dict:
+    <<: *servico
+    build: { <<: *build, args: { SERVICO: dict, VERSAO: "${VERSAO:-dev}" } }
+    environment:
+      <<: *ambiente
+      DATABASE_URL: postgres://dict:${PG_PASSWORD:?defina PG_PASSWORD no .env}@pg-dict:5432/dict?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}@redis:6379/0
+    networks: [nucleo, db-dict, observabilidade]
+    depends_on:
+      pg-dict: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  antifraude:
+    <<: *servico
+    build: { <<: *build, args: { SERVICO: antifraude, VERSAO: "${VERSAO:-dev}" } }
+    networks: [nucleo, observabilidade]
+
+  auditor:
+    <<: *servico
+    build: { <<: *build, args: { SERVICO: auditor, VERSAO: "${VERSAO:-dev}" } }
+    environment:
+      <<: *ambiente
+      AUDITOR_ALVOS: http://psp-alfa:8080,http://psp-beta:8080,http://spi:8080
+    networks: [nucleo, observabilidade]
+
+  # ---------- Dados ----------
+  pg-psp-alfa:
+    <<: *postgres
+    environment: { POSTGRES_USER: psp, POSTGRES_DB: psp, POSTGRES_PASSWORD: "${PG_PASSWORD:?defina PG_PASSWORD no .env}", PSP_ISPB: "10000001" }
+    volumes:
+      - pg-psp-alfa:/var/lib/postgresql
+      - ./deploy/postgres/psp:/docker-entrypoint-initdb.d:ro
+    networks: [db-psp-alfa]
+
+  pg-psp-beta:
+    <<: *postgres
+    environment: { POSTGRES_USER: psp, POSTGRES_DB: psp, POSTGRES_PASSWORD: "${PG_PASSWORD:?defina PG_PASSWORD no .env}", PSP_ISPB: "20000002" }
+    volumes:
+      - pg-psp-beta:/var/lib/postgresql
+      - ./deploy/postgres/psp:/docker-entrypoint-initdb.d:ro
+    networks: [db-psp-beta]
+
+  pg-spi:
+    <<: *postgres
+    environment: { POSTGRES_USER: spi, POSTGRES_DB: spi, POSTGRES_PASSWORD: "${PG_PASSWORD:?defina PG_PASSWORD no .env}" }
+    volumes:
+      - pg-spi:/var/lib/postgresql
+      - ./deploy/postgres/spi:/docker-entrypoint-initdb.d:ro
+    networks: [db-spi]
+
+  pg-dict:
+    <<: *postgres
+    environment: { POSTGRES_USER: dict, POSTGRES_DB: dict, POSTGRES_PASSWORD: "${PG_PASSWORD:?defina PG_PASSWORD no .env}" }
+    volumes:
+      - pg-dict:/var/lib/postgresql
+      - ./deploy/postgres/dict:/docker-entrypoint-initdb.d:ro
+    networks: [db-dict]
+
+  redis:
+    image: redis:8.8-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}", "--appendonly", "no"]
+    environment:
+      REDISCLI_AUTH: "${REDIS_PASSWORD:?defina REDIS_PASSWORD no .env}"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    networks: [db-dict]
+
+  # ---------- Mensageria ----------
+  redpanda:
+    image: redpandadata/redpanda:v26.2.6
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --memory=1G
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "127.0.0.1:19092:19092"
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+    networks: [nucleo]
+
+  # Cria os tópicos e termina. Os serviços só sobem depois dele.
+  redpanda-init:
+    image: redpandadata/redpanda:v26.2.6
+    entrypoint: ["/bin/bash", "/criar-topicos.sh"]
+    environment:
+      RPK_BROKERS: redpanda:9092
+    volumes:
+      - ./deploy/redpanda/criar-topicos.sh:/criar-topicos.sh:ro
+    networks: [nucleo]
+    depends_on:
+      redpanda: { condition: service_healthy }
+
+  # ---------- Observabilidade (perfil opcional) ----------
+  prometheus:
+    image: prom/prometheus:v3.15.1
+    profiles: [observabilidade]
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks: [observabilidade]
+
+  grafana:
+    image: grafana/grafana:13.0.12
+    profiles: [observabilidade]
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:?defina GRAFANA_ADMIN_PASSWORD no .env}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [observabilidade]
+    depends_on: [prometheus]
+
+  # ---------- Ferramentas (perfil opcional) ----------
+  # Cliente HTTP dentro das redes internas, usado pelo teste de fumaça.
+  curl:
+    image: curlimages/curl:8.17.0
+    profiles: [ferramentas]
+    networks: [borda, nucleo]
+
+networks:
+  borda:
+  nucleo:
+  observabilidade:
+  db-psp-alfa:
+    internal: true
+  db-psp-beta:
+    internal: true
+  db-spi:
+    internal: true
+  db-dict:
+    internal: true
+
+volumes:
+  pg-psp-alfa:
+  pg-psp-beta:
+  pg-spi:
+  pg-dict:
+  redpanda:
