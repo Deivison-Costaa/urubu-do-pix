@@ -1,0 +1,157 @@
+# API Gateway (Envoy). No Projeto 02: roteamento, rate limit e health check
+# ativo. No Projeto 03: validação de JWT (Keycloak), autorização via OPA e
+# mTLS até os serviços (ADR-0005).
+# O admin só escuta no loopback do container: quem está na rede (inclusive
+# os PSPs) não consegue desligar limites nem derrubar o gateway por ele.
+admin:
+  address:
+    socket_address: { address: 127.0.0.1, port_value: 9901 }
+
+static_resources:
+  listeners:
+    - name: entrada
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 8080 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: entrada
+                generate_request_id: true
+                normalize_path: true
+                merge_slashes: true
+                path_with_escaped_slashes_action: REJECT_REQUEST
+                access_log:
+                  - name: envoy.access_loggers.stdout
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
+                      log_format:
+                        json_format:
+                          inicio: "%START_TIME%"
+                          metodo: "%REQ(:METHOD)%"
+                          caminho: "%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%"
+                          status: "%RESPONSE_CODE%"
+                          flags: "%RESPONSE_FLAGS%"
+                          duracao_ms: "%DURATION%"
+                          destino: "%UPSTREAM_CLUSTER%"
+                          id_requisicao: "%REQ(X-REQUEST-ID)%"
+                route_config:
+                  name: rotas
+                  virtual_hosts:
+                    - name: urubu
+                      domains: ["*"]
+                      routes:
+                        # Métricas são internas: só o Prometheus as lê, direto no serviço.
+                        - match: { safe_regex: { regex: "^/psp/[a-z]+/metrics.*" } }
+                          direct_response: { status: 404 }
+                        # Consulta de chaves: limite estrito contra varredura do DICT.
+                        - match: { prefix: "/psp/alfa/v1/chaves/" }
+                          route: { cluster: psp-alfa, prefix_rewrite: "/v1/chaves/", timeout: 3s }
+                          typed_per_filter_config:
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                              stat_prefix: limite_chaves_alfa
+                              token_bucket: { max_tokens: 10, tokens_per_fill: 10, fill_interval: 1s }
+                              filter_enabled: { runtime_key: limite_chaves_alfa_ativo, default_value: { numerator: 100, denominator: HUNDRED } }
+                              filter_enforced: { runtime_key: limite_chaves_alfa_aplicado, default_value: { numerator: 100, denominator: HUNDRED } }
+                        - match: { prefix: "/psp/alfa/" }
+                          route: { cluster: psp-alfa, prefix_rewrite: "/", timeout: 5s }
+                        # Consulta de chaves: limite estrito contra varredura do DICT.
+                        - match: { prefix: "/psp/beta/v1/chaves/" }
+                          route: { cluster: psp-beta, prefix_rewrite: "/v1/chaves/", timeout: 3s }
+                          typed_per_filter_config:
+                            envoy.filters.http.local_ratelimit:
+                              "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                              stat_prefix: limite_chaves_beta
+                              token_bucket: { max_tokens: 10, tokens_per_fill: 10, fill_interval: 1s }
+                              filter_enabled: { runtime_key: limite_chaves_beta_ativo, default_value: { numerator: 100, denominator: HUNDRED } }
+                              filter_enforced: { runtime_key: limite_chaves_beta_aplicado, default_value: { numerator: 100, denominator: HUNDRED } }
+                        - match: { prefix: "/psp/beta/" }
+                          route: { cluster: psp-beta, prefix_rewrite: "/", timeout: 5s }
+                http_filters:
+                  # Limite global da borda; rotas sensíveis têm limite próprio.
+                  - name: envoy.filters.http.local_ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                      stat_prefix: limite_global
+                      token_bucket: { max_tokens: 1000, tokens_per_fill: 1000, fill_interval: 1s }
+                      filter_enabled: { runtime_key: limite_global_ativo, default_value: { numerator: 100, denominator: HUNDRED } }
+                      filter_enforced: { runtime_key: limite_global_aplicado, default_value: { numerator: 100, denominator: HUNDRED } }
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+    # Só leitura das métricas, para o Prometheus. Repassa ao admin apenas
+    # GET /stats/prometheus; qualquer outro caminho recebe 404.
+    - name: metricas
+      address:
+        socket_address: { address: 0.0.0.0, port_value: 9902 }
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: metricas
+                route_config:
+                  name: metricas
+                  virtual_hosts:
+                    - name: metricas
+                      domains: ["*"]
+                      routes:
+                        - match: { path: "/stats/prometheus", headers: [{ name: ":method", string_match: { exact: GET } }] }
+                          route: { cluster: admin }
+                        - match: { prefix: "/" }
+                          direct_response: { status: 404 }
+                http_filters:
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+  clusters:
+    - name: psp-alfa
+      type: STRICT_DNS
+      connect_timeout: 1s
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: psp-alfa
+        endpoints:
+          - lb_endpoints:
+              - endpoint: { address: { socket_address: { address: psp-alfa, port_value: 8080 } } }
+      # Tira do balanceamento a instância que não está pronta (/readyz).
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          http_health_check: { path: /readyz }
+      outlier_detection:
+        consecutive_5xx: 5
+        base_ejection_time: 10s
+    - name: psp-beta
+      type: STRICT_DNS
+      connect_timeout: 1s
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: psp-beta
+        endpoints:
+          - lb_endpoints:
+              - endpoint: { address: { socket_address: { address: psp-beta, port_value: 8080 } } }
+      # Tira do balanceamento a instância que não está pronta (/readyz).
+      health_checks:
+        - timeout: 1s
+          interval: 5s
+          unhealthy_threshold: 2
+          healthy_threshold: 1
+          http_health_check: { path: /readyz }
+      outlier_detection:
+        consecutive_5xx: 5
+        base_ejection_time: 10s
+    - name: admin
+      type: STATIC
+      connect_timeout: 1s
+      load_assignment:
+        cluster_name: admin
+        endpoints:
+          - lb_endpoints:
+              - endpoint: { address: { socket_address: { address: 127.0.0.1, port_value: 9901 } } }
