@@ -17,6 +17,19 @@ Uma entrada por tarefa, da mais recente para a mais antiga:
 
 ## Entradas
 
+### 2026-11-04: código-base e documentação do Projeto 02
+- **Integrante:** Deivison Costa (pedido e verificação); cada integrante revisou e enviou a parte da própria frente
+- **Ferramenta e modelo:** Claude Code, modelo Claude Opus 5.5
+- **Parte do trabalho:** código (plataforma comum, tipos de domínio, esqueletos dos cinco serviços), testes unitários, Docker Compose, Envoy, esquemas SQL, pipeline de CI, Dependabot, diagramas C4, ADRs 0001 a 0005, stack, padrões, plano de testes, divisão de responsabilidades e roteiro da apresentação
+- **Contexto fornecido:** enunciado, proposta do Projeto 01 e o pedido de fazer tudo o que a entrega exige. Restrições: testes escritos antes da implementação, valores monetários só em inteiros, versões de imagens e actions fixadas, imagens distroless, credenciais fora do repositório, Conventional Commits
+- **Resultado:**
+  - Aceito: a estrutura do repositório, a plataforma comum, os ADRs e a topologia de tópicos (uma caixa de entrada por participante, como no SPI real).
+  - Corrigido durante a verificação: a recuperação de pânico ficava fora da instrumentação e as respostas 500 não entravam nas métricas; o teste de segmentação de rede passava nos dois casos (rede certa e errada) e foi trocado por `pg_isready` com controle positivo; a porta do gateway virou variável porque a 8080 estava ocupada na máquina de desenvolvimento; ajuste de indentação no YAML do Envoy.
+  - Corrigido depois de uma revisão de código feita por um segundo agente do Claude Code: o encerramento gracioso cancelava as requisições em andamento (o contexto delas herdava o cancelamento do sinal; agora usa `context.WithoutCancel`, com teste); a interface administrativa do Envoy estava acessível aos PSPs pela rede (agora só no loopback, com um listener à parte só para as métricas); o gateway não tinha healthcheck, o que deixava o teste de fumaça sujeito a corrida no CI; e o CI podia cancelar a publicação na `main` entre o push e a assinatura da imagem. Uma suspeita da revisão (desvio do bloqueio de `/metrics` com caminho codificado) foi testada e não se confirmou.
+  - Mudança de desenho em relação à proposta: na proposta, o SPI liquidava e depois devolvia se o recebedor recusasse. No ADR-0001 o SPI pede o aceite antes de liquidar, como no Pix real, e a compensação vira estorno no pagador.
+  - Verificação: testes com `-race` (cobertura de 81% a 100% por pacote), golangci-lint sem apontamentos, govulncheck e Trivy sem vulnerabilidades altas, ambiente completo subindo com todos os healthchecks e teste de fumaça passando.
+  - Revisão de cada frente pela equipe: *cada integrante registra aqui ao enviar a sua parte*
+
 ### 2026-10-08: escolha do tema e documentação do Projeto 01
 - **Integrante:** Deivison Costa
 - **Ferramenta e modelo:** Claude Code, modelo Claude Opus 5.5
