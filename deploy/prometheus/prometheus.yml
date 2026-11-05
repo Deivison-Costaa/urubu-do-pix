@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: servicos
+    static_configs:
+      - targets: ["psp-alfa:8080", "psp-beta:8080", "spi:8080", "dict:8080", "antifraude:8080", "auditor:8080"]
+  - job_name: gateway
+    metrics_path: /stats/prometheus
+    static_configs:
+      - targets: ["gateway:9902"]
