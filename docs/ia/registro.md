@@ -17,7 +17,7 @@ Uma entrada por tarefa, da mais recente para a mais antiga:
 
 ## Entradas
 
-### 2026-11-13: revisão dos slides 2 e 3 da apresentação do Projeto 02
+### 2026-11-13: revisão dos slides da apresentação do Projeto 02
 - **Integrante:** Deivison Costa
 - **Ferramenta e modelo:** Claude Code, modelo Claude Fable 5.2
 - **Parte do trabalho:** redação (slides da apresentação)
@@ -25,7 +25,8 @@ Uma entrada por tarefa, da mais recente para a mais antiga:
 - **Resultado:**
   - Aceito: o slide 2 passou a usar um exemplo concreto (Ana, do Alfa, envia R$ 100 para Carla, do Beta) com três falhas possíveis, cada uma resolvida por uma decisão mostrada adiante (Outbox, idempotência, prazo de aceite e estorno); no slide 3, as metas foram reescritas em linguagem simples, com os mesmos números da proposta.
   - Corrigido: o título do slide 3 perdeu o trecho "(proposta aprovada)", por decisão do integrante.
-  - Verificação: PDF regerado com o Marp e conferido slide a slide (17 páginas, sem texto cortado).
+  - Descartado, por decisão do integrante: o slide da demonstração (a demo é feita ao vivo, sem slide de apoio) e a indicação de tempo no topo de cada slide.
+  - Verificação: PDF regerado com o Marp e conferido slide a slide (16 páginas, sem texto cortado).
 
 ### 2026-11-04: código-base e documentação do Projeto 02
 - **Integrante:** Deivison Costa (pedido e verificação); cada integrante revisou e enviou a parte da própria frente

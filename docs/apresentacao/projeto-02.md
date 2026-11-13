@@ -33,7 +33,7 @@ Deivison · Giancarlo · Herlan
 
 ---
 
-<div class="quem">Deivison · ~1 min</div>
+<div class="quem">Deivison</div>
 
 ## O problema
 
@@ -93,7 +93,7 @@ Não existe transação distribuída (2PC) entre instituições. **A garantia te
 
 ---
 
-<div class="quem">Deivison · ADR-0001 · ~1 min</div>
+<div class="quem">Deivison · ADR-0001</div>
 
 ## SAGA orquestrada pelo SPI + Outbox
 
@@ -107,7 +107,7 @@ Não existe transação distribuída (2PC) entre instituições. **A garantia te
 
 ---
 
-<div class="quem">Giancarlo · ADR-0002 · ~1,5 min</div>
+<div class="quem">Giancarlo · ADR-0002</div>
 
 ## Mensageria: Redpanda, uma caixa de entrada por participante
 
@@ -125,7 +125,7 @@ Não existe transação distribuída (2PC) entre instituições. **A garantia te
 
 ---
 
-<div class="quem">Giancarlo · ~1 min</div>
+<div class="quem">Giancarlo</div>
 
 ## Idempotência ponta a ponta
 
@@ -145,7 +145,7 @@ Valores sempre em **centavos inteiros**: `float` perde centavos em somas.
 
 ---
 
-<div class="quem">Herlan · ADR-0003 · ~1,5 min</div>
+<div class="quem">Herlan · ADR-0003</div>
 
 ## Zero Trust na borda
 
@@ -162,7 +162,7 @@ Valores sempre em **centavos inteiros**: `float` perde centavos em somas.
 
 ---
 
-<div class="quem">Herlan · ~1 min</div>
+<div class="quem">Herlan</div>
 
 ## Segmentação de rede e containers endurecidos
 
@@ -178,7 +178,7 @@ Valores sempre em **centavos inteiros**: `float` perde centavos em somas.
 
 ---
 
-<div class="quem">Herlan · ~1 min</div>
+<div class="quem">Herlan</div>
 
 ## Stack
 
@@ -194,7 +194,7 @@ Valores sempre em **centavos inteiros**: `float` perde centavos em somas.
 
 ---
 
-<div class="quem">Herlan · ADR-0004 · ~1,5 min</div>
+<div class="quem">Herlan · ADR-0004</div>
 
 ## Pipeline DevSecOps
 
@@ -212,7 +212,7 @@ Supply chain:
 
 ---
 
-<div class="quem">Giancarlo · ADR-0005 · ~1,5 min</div>
+<div class="quem">Giancarlo · ADR-0005</div>
 
 ## Auditor de invariantes e observabilidade
 
@@ -229,7 +229,7 @@ Desde o primeiro commit: `/metrics` por rota, `/healthz` ≠ `/readyz`, logs JSO
 
 ---
 
-<div class="quem">Giancarlo · ~1 min</div>
+<div class="quem">Giancarlo</div>
 
 ## Plano de testes
 
@@ -246,28 +246,7 @@ Desde o primeiro commit: `/metrics` por rota, `/healthz` ≠ `/readyz`, logs JSO
 
 ---
 
-<div class="quem">Giancarlo · demo · ~1 min</div>
-
-## Demonstração
-
-```bash
-cp .env.example .env
-docker compose up -d --build --wait
-./scripts/fumaca.sh
-docker compose --profile observabilidade up -d   # Prometheus em :9090
-```
-
-- 13 containers saudáveis
-- Gateway roteia, limita (429) e esconde o núcleo
-- Bancos isolados por rede
-- Tópicos e DLQs criados
-- Invariante de conservação válido nos dados iniciais
-
-<!-- Se a rede da sala falhar, mostrar a gravação ou o log do job "Teste de fumaça" no GitHub Actions. -->
-
----
-
-<div class="quem">Deivison · ~1 min</div>
+<div class="quem">Deivison</div>
 
 ## Divisão e próximos passos (Projeto 03)
 
