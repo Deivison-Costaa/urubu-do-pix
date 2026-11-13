@@ -37,35 +37,39 @@ Deivison · Giancarlo · Herlan
 
 ## O problema
 
-Um Pix atravessa **três participantes independentes**, cada um com o próprio banco de dados:
+<style scoped>table { font-size: 23px; }</style>
 
-**banco pagador → liquidante central (SPI) → banco recebedor**
+Ana, do Banco Alfa, envia **R$ 100** para Carla, do Banco Beta. São **três bancos de dados**, de três participantes independentes:
 
-- Precisa terminar em **segundos**
-- Com **quedas, timeouts, partições de rede e mensagens repetidas**
-- E a **soma dos saldos não pode mudar**
+**Alfa debita Ana → SPI move as reservas → Beta credita Carla**
+
+| Se no meio do caminho... | Sem tratamento |
+|---|---|
+| o Alfa debita e cai antes de avisar o SPI | R$ 100 **somem** |
+| a mesma mensagem chega duas vezes | Carla recebe **R$ 200** |
+| o Beta nunca responde | pagamento **preso** para sempre |
 
 Não existe transação distribuída (2PC) entre instituições. **A garantia tem de vir da arquitetura.**
 
-<!-- Deivison: enfatizar que o problema não é "fazer uma API de pagamento", é manter um invariante global sem transação global. -->
+<!-- Deivison: o problema não é "fazer uma API de pagamento", é manter a soma dos saldos sem transação global. Cada linha da tabela é resolvida adiante: Outbox (slide 6), idempotência (slide 8), prazo de aceite e estorno (slide 6). -->
 
 ---
 
 <div class="quem">Deivison</div>
 
-## Critérios de sucesso (proposta aprovada)
+## Critérios de sucesso
 
 | # | Critério | Meta |
 |---|---|---|
-| C1 | Conservação | soma dos saldos idêntica antes e depois de qualquer cenário |
-| C2 | Idempotência | 0 liquidações duplicadas em 10.000 reenvios |
-| C3 | Desempenho | p99 ≤ 2 s a 300 pagamentos/s por 10 min |
-| C4 | Resiliência | rede cortada sob carga: 100% em estado final ≤ 30 s após reconectar |
-| C5 | Degradação | antifraude fora: circuit breaker abre em ≤ 5 s |
-| C6 | Segurança | 100% das chamadas sem credencial recusadas; varredura bloqueada |
-| C7 | Deployment | canary do antifraude com rollback automático |
+| C1 | Conservação | somando o saldo de todo mundo, o total é o mesmo antes e depois de qualquer teste |
+| C2 | Idempotência | a mesma ordem enviada 10.000 vezes move o dinheiro uma vez só |
+| C3 | Desempenho | com 300 pagamentos por segundo durante 10 min, 99% terminam em até 2 s |
+| C4 | Resiliência | rede cortada sob carga: até 30 s depois de voltar, nenhum pagamento fica preso |
+| C5 | Degradação | se o antifraude cair, o disjuntor abre em até 5 s e os pagamentos pequenos continuam |
+| C6 | Segurança | toda chamada sem credencial é recusada; consulta de chaves em massa é bloqueada |
+| C7 | Deployment | versão nova do antifraude com defeito é detectada e desfeita sozinha |
 
-<!-- Cada decisão que vamos mostrar está amarrada a um destes critérios. -->
+<!-- Cada decisão que vamos mostrar está amarrada a um destes critérios. Termos técnicos, se perguntarem: C3 = p99 ≤ 2 s; C5 = circuit breaker; C7 = canary com rollback automático. -->
 
 ---
 
