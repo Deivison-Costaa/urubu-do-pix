@@ -42,7 +42,7 @@ Uma entrada por tarefa, da mais recente para a mais antiga:
   - Verificação: testes com `-race` (cobertura de 81% a 100% por pacote), golangci-lint sem apontamentos, govulncheck e Trivy sem vulnerabilidades altas, ambiente completo subindo com todos os healthchecks e teste de fumaça passando.
   - Revisão de cada frente pela equipe (cada integrante registra a sua):
     - **Deivison Costa** (liquidação, observabilidade e coordenação): a IA serviu para discutir a ideia do projeto, gerar e revisar o código.
-    - **Giancarlo Silveira Cavalcante** (bancos, mensageria e qualidade): *a preencher*
+    - **Giancarlo Silveira Cavalcante** (bancos, mensageria e qualidade): a IA serviu para gerar e revisar o código da frente (geração e validação do EndToEndId com testes, esqueleto do PSP com esquema de contas, lançamentos imutáveis, Outbox e Inbox, tópicos do Redpanda com DLQ, esqueleto do auditor, Prometheus e Grafana e teste de fumaça) e para redigir o ADR-0002 (mensageria), o ADR-0005 (auditor de invariantes) e o plano de testes. O teste de fumaça foi corrigido na verificação (a segmentação de rede passou a usar `pg_isready` com controle positivo) e na revisão por um segundo agente (a falta de healthcheck no gateway deixava o teste sujeito a corrida no CI).
     - **Herlan Alef de Lima Nascimento** (borda, segurança e entrega): *a preencher*
 
 ### 2026-10-08: escolha do tema e documentação do Projeto 01
