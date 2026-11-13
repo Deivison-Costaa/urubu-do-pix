@@ -156,8 +156,6 @@ Valores sempre em **centavos inteiros**: `float` perde centavos em somas.
 - `/metrics` bloqueado na borda
 - Health check ativo em `/readyz` e ejeção de instância com erros 5xx seguidos
 
-**No P03:** Keycloak (OIDC/JWT) validado no Envoy, autorização no OPA, mTLS entre serviços
-
 <!-- Herlan: a varredura de chaves é um golpe real do Pix, usado para levantar dados pessoais. -->
 
 ---

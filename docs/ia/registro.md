@@ -26,6 +26,7 @@ Uma entrada por tarefa, da mais recente para a mais antiga:
   - Aceito: o slide 2 passou a usar um exemplo concreto (Ana, do Alfa, envia R$ 100 para Carla, do Beta) com três falhas possíveis, cada uma resolvida por uma decisão mostrada adiante (Outbox, idempotência, prazo de aceite e estorno); no slide 3, as metas foram reescritas em linguagem simples, com os mesmos números da proposta.
   - Corrigido: o título do slide 3 perdeu o trecho "(proposta aprovada)", por decisão do integrante.
   - Descartado, por decisão do integrante: o slide da demonstração (a demo é feita ao vivo, sem slide de apoio) e a indicação de tempo no topo de cada slide.
+  - Descartado, a pedido do Herlan: a linha sobre o Projeto 03 no slide 9 (Zero Trust na borda), porque os próximos passos já estão no slide final.
   - Verificação: PDF regerado com o Marp e conferido slide a slide (16 páginas, sem texto cortado).
 
 ### 2026-11-04: código-base e documentação do Projeto 02
